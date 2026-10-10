@@ -108,3 +108,10 @@ def register_banking_tools() -> None:
     register_tool("get_accounts", get_accounts)
     register_tool("get_transactions", get_transactions)
     register_tool("get_card_status", get_card_status)
+
+
+def register_fraud_tools() -> None:
+    """Register fraud domain tools (score_transaction)."""
+    from ml.fraud_model import score_transaction
+
+    register_tool("score_transaction", score_transaction)
