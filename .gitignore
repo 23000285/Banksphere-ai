@@ -1,0 +1,38 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project artifacts (generated data, models, databases)
+*.db
+*.sqlite3
+data/*.db
+data/*.sqlite3
+data/*.csv
+ml/models/*.pkl
+ml/models/*.joblib
+ml/models/*.txt
+rag/chroma_db/
+
+# Jupyter
+.ipynb_checkpoints/
