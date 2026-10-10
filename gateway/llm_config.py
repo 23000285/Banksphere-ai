@@ -1,4 +1,4 @@
-"""Centralized LLM configuration — loads settings from environment variables.
+"""Centralized LLM configuration — loads settings from .env via pydantic-settings.
 
 Supports three providers:
   mock    — deterministic responses, no API key, no network (default)
@@ -8,9 +8,10 @@ Supports three providers:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import Literal
+
+from app.config import AppSettings, get_settings
 
 VALID_PROVIDERS = ("mock", "gemini", "bedrock")
 
@@ -43,21 +44,16 @@ class LLMConfig:
         return self.model
 
 
-def _parse_bool(value: str) -> bool:
-    return value.strip().lower() in ("true", "1", "yes")
+def _validate(settings: AppSettings) -> LLMConfig:
+    """Validate settings and return an LLMConfig.
 
-
-def load_llm_config() -> LLMConfig:
-    """Load and validate LLM configuration from environment variables.
-
-    Returns a validated LLMConfig. Raises LLMConfigError with an actionable
-    message when required settings are missing or inconsistent.
+    Raises LLMConfigError with an actionable message on invalid configuration.
     """
-    provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
-    model = os.getenv("LLM_MODEL", "mock-response").strip()
-    mock_llm = _parse_bool(os.getenv("MOCK_LLM", "true"))
-    gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-    aws_region = os.getenv("AWS_REGION", "")
+    provider = settings.llm_provider.strip().lower()
+    model = settings.llm_model.strip()
+    mock_llm = settings.mock_llm
+    gemini_api_key = settings.gemini_api_key
+    aws_region = settings.aws_region
 
     if provider not in VALID_PROVIDERS:
         raise LLMConfigError(
@@ -93,3 +89,14 @@ def load_llm_config() -> LLMConfig:
         gemini_api_key=gemini_api_key,
         aws_region=aws_region,
     )
+
+
+def load_llm_config(settings: AppSettings | None = None) -> LLMConfig:
+    """Load and validate LLM configuration.
+
+    Uses the provided settings or falls back to the global AppSettings singleton
+    (which reads .env automatically via pydantic-settings).
+    """
+    if settings is None:
+        settings = get_settings()
+    return _validate(settings)

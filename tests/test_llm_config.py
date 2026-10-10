@@ -1,9 +1,30 @@
 """Tests for LLM configuration loading, validation, and mock provider."""
 
-import os
 import pytest
+from app.config import AppSettings, reset_settings
 from gateway.llm_config import LLMConfig, LLMConfigError, load_llm_config
-from gateway.mock_llm import MockLLM, MockLLMResponse, MOCK_PREFIX
+from gateway.mock_llm import MockLLM, MOCK_PREFIX
+
+
+@pytest.fixture(autouse=True)
+def _clean_settings():
+    """Reset cached settings before each test."""
+    reset_settings()
+    yield
+    reset_settings()
+
+
+def _make_settings(**overrides) -> AppSettings:
+    """Build an AppSettings with test defaults, without reading .env."""
+    defaults = {
+        "llm_provider": "mock",
+        "llm_model": "mock-response",
+        "mock_llm": True,
+        "gemini_api_key": "",
+        "aws_region": "",
+    }
+    defaults.update(overrides)
+    return AppSettings(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -11,90 +32,71 @@ from gateway.mock_llm import MockLLM, MockLLMResponse, MOCK_PREFIX
 # ---------------------------------------------------------------------------
 
 class TestLoadLLMConfig:
-    """Test load_llm_config with various environment states."""
 
-    def _set_env(self, monkeypatch, **kwargs):
-        for key in ("LLM_PROVIDER", "LLM_MODEL", "MOCK_LLM",
-                     "GEMINI_API_KEY", "AWS_REGION"):
-            monkeypatch.delenv(key, raising=False)
-        for key, val in kwargs.items():
-            monkeypatch.setenv(key, val)
-
-    def test_defaults_to_mock(self, monkeypatch):
-        self._set_env(monkeypatch)
-        cfg = load_llm_config()
+    def test_defaults_to_mock(self):
+        cfg = load_llm_config(_make_settings())
         assert cfg.provider == "mock"
         assert cfg.mock_llm is True
         assert cfg.is_mock is True
 
-    def test_explicit_mock(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="mock", LLM_MODEL="mock-response", MOCK_LLM="true")
-        cfg = load_llm_config()
+    def test_explicit_mock(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="mock", llm_model="mock-response", mock_llm=True))
         assert cfg.provider == "mock"
         assert cfg.is_mock is True
         assert cfg.litellm_model == ""
 
-    def test_mock_provider_requires_mock_flag(self, monkeypatch):
-        self._set_env(monkeypatch, LLM_PROVIDER="mock", MOCK_LLM="false")
+    def test_mock_provider_requires_mock_flag(self):
         with pytest.raises(LLMConfigError, match="MOCK_LLM=true"):
-            load_llm_config()
+            load_llm_config(_make_settings(llm_provider="mock", mock_llm=False))
 
-    def test_invalid_provider(self, monkeypatch):
-        self._set_env(monkeypatch, LLM_PROVIDER="openai", MOCK_LLM="false")
+    def test_invalid_provider(self):
         with pytest.raises(LLMConfigError, match="not supported"):
-            load_llm_config()
+            load_llm_config(_make_settings(llm_provider="openai", mock_llm=False))
 
-    def test_gemini_requires_api_key(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="gemini", LLM_MODEL="gemini-2.0-flash", MOCK_LLM="false")
+    def test_gemini_requires_api_key(self):
         with pytest.raises(LLMConfigError, match="GEMINI_API_KEY"):
-            load_llm_config()
+            load_llm_config(_make_settings(
+                llm_provider="gemini", llm_model="gemini-2.0-flash", mock_llm=False))
 
-    def test_gemini_with_key(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="gemini", LLM_MODEL="gemini-2.0-flash",
-                      MOCK_LLM="false", GEMINI_API_KEY="test-key-123")
-        cfg = load_llm_config()
+    def test_gemini_with_key(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="gemini", llm_model="gemini-2.0-flash",
+            mock_llm=False, gemini_api_key="test-key-123"))
         assert cfg.provider == "gemini"
         assert cfg.is_mock is False
         assert cfg.litellm_model == "gemini/gemini-2.0-flash"
 
-    def test_gemini_model_prefix_preserved(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="gemini", LLM_MODEL="gemini/gemini-2.0-flash",
-                      MOCK_LLM="false", GEMINI_API_KEY="test-key-123")
-        cfg = load_llm_config()
+    def test_gemini_model_prefix_preserved(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="gemini", llm_model="gemini/gemini-2.0-flash",
+            mock_llm=False, gemini_api_key="test-key-123"))
         assert cfg.litellm_model == "gemini/gemini-2.0-flash"
 
-    def test_gemini_with_mock_override(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="gemini", LLM_MODEL="gemini-2.0-flash", MOCK_LLM="true")
-        cfg = load_llm_config()
+    def test_gemini_with_mock_override(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="gemini", llm_model="gemini-2.0-flash", mock_llm=True))
         assert cfg.is_mock is True
 
-    def test_bedrock_requires_region(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="bedrock",
-                      LLM_MODEL="anthropic.claude-3-sonnet-20240229-v1:0",
-                      MOCK_LLM="false")
+    def test_bedrock_requires_region(self):
         with pytest.raises(LLMConfigError, match="AWS_REGION"):
-            load_llm_config()
+            load_llm_config(_make_settings(
+                llm_provider="bedrock",
+                llm_model="anthropic.claude-3-sonnet-20240229-v1:0",
+                mock_llm=False))
 
-    def test_bedrock_with_region(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="bedrock",
-                      LLM_MODEL="anthropic.claude-3-sonnet-20240229-v1:0",
-                      MOCK_LLM="false", AWS_REGION="us-east-1")
-        cfg = load_llm_config()
+    def test_bedrock_with_region(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="bedrock",
+            llm_model="anthropic.claude-3-sonnet-20240229-v1:0",
+            mock_llm=False, aws_region="us-east-1"))
         assert cfg.provider == "bedrock"
         assert cfg.is_mock is False
 
-    def test_api_key_not_in_repr(self, monkeypatch):
-        self._set_env(monkeypatch,
-                      LLM_PROVIDER="gemini", LLM_MODEL="gemini-2.0-flash",
-                      MOCK_LLM="false", GEMINI_API_KEY="secret-key-xyz")
-        cfg = load_llm_config()
+    def test_api_key_not_in_repr(self):
+        cfg = load_llm_config(_make_settings(
+            llm_provider="gemini", llm_model="gemini-2.0-flash",
+            mock_llm=False, gemini_api_key="secret-key-xyz"))
         assert "secret-key-xyz" not in repr(cfg)
 
 
@@ -103,7 +105,6 @@ class TestLoadLLMConfig:
 # ---------------------------------------------------------------------------
 
 class TestMockLLM:
-    """Test the deterministic mock LLM."""
 
     def test_response_is_prefixed(self):
         llm = MockLLM()

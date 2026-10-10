@@ -34,5 +34,8 @@ ml/models/*.joblib
 ml/models/*.txt
 rag/chroma_db/
 
+# Testing
+.pytest_cache/
+
 # Jupyter
 .ipynb_checkpoints/

@@ -23,7 +23,7 @@ BankSphere AI demonstrates a supervisor-agent architecture where specialist agen
 
 ## Project Status
 
-Phase 0 — Repository baseline established. Application implementation begins in subsequent phases.
+Phase 1 — Project scaffold with core dependencies, centralized LLM configuration, and deterministic mock mode. No agents or ML pipelines yet.
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ Phase 0 — Repository baseline established. Application implementation begins i
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies (after requirements.txt is populated)
+# Install dependencies
 pip install -r requirements.txt
 
 # Copy environment template — defaults to mock mode (no API keys needed)
