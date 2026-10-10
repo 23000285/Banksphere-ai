@@ -35,13 +35,44 @@ source .venv/bin/activate
 # Install dependencies (after requirements.txt is populated)
 pip install -r requirements.txt
 
-# Copy environment template
+# Copy environment template — defaults to mock mode (no API keys needed)
 cp .env.example .env
-# Edit .env with your configuration
 
 # Run tests
 python -m pytest -q
 ```
+
+## LLM Provider Configuration
+
+The application defaults to **mock mode** — no API keys, no network access, no cost. All mock responses are prefixed with `[MOCK]` so they are never mistaken for real LLM output.
+
+| Provider | Cost | Setup |
+|---|---|---|
+| `mock` (default) | Free | No configuration needed |
+| `gemini` | Free tier (limited quota) | Set `GEMINI_API_KEY` in `.env` |
+| `bedrock` | Paid per token | Configure AWS credentials and region |
+
+To switch providers, edit `.env`:
+
+```bash
+# Option 1: Mock (default) — no keys needed
+LLM_PROVIDER=mock
+MOCK_LLM=true
+
+# Option 2: Gemini free tier — requires API key
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini/gemini-2.0-flash
+MOCK_LLM=false
+GEMINI_API_KEY=your-key-here
+
+# Option 3: Bedrock — requires AWS credentials and incurs charges
+LLM_PROVIDER=bedrock
+LLM_MODEL=anthropic.claude-3-sonnet-20240229-v1:0
+MOCK_LLM=false
+AWS_REGION=us-east-1
+```
+
+**Important:** Never commit API keys. The `.env` file is gitignored. Free-tier quotas (Gemini) are limited and not guaranteed — do not rely on them for automated tests.
 
 ## Demonstration Scenarios
 
