@@ -13,10 +13,10 @@ uvicorn[standard]>=0.29,<1.0
 # Agent orchestration (Phase 5+)
 # langgraph
 
-# Synthetic data (Phase 2+)
-# faker
-# numpy
-# pandas
+# Synthetic data
+faker>=30.0,<50.0
+numpy>=1.26,<3.0
+pandas>=2.1,<3.0
 
 # ML (Phase 4+)
 # lightgbm
