@@ -72,7 +72,7 @@ class _GraphState(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
-    ("fraud", ["fraud", "suspicious", "risk score", "flagged", "anomaly"]),
+    ("fraud", ["fraud", "fraudulent", "suspicious", "risk score", "flagged", "anomaly"]),
     ("credit", ["credit", "loan", "emi", "eligibility", "borrow", "interest rate"]),
     ("banking", ["balance", "transactions", "transaction", "account", "profile", "card", "transfer", "statement"]),
 ]
