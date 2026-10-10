@@ -115,3 +115,11 @@ def register_fraud_tools() -> None:
     from ml.fraud_model import score_transaction
 
     register_tool("score_transaction", score_transaction)
+
+
+def register_credit_tools() -> None:
+    """Register credit domain tools (assess_credit_risk, calculate_emi)."""
+    from ml.credit_model import assess_credit_risk, calculate_emi
+
+    register_tool("assess_credit_risk", assess_credit_risk)
+    register_tool("calculate_emi", calculate_emi)
