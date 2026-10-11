@@ -48,6 +48,7 @@ class RoutingResult(BaseModel):
     trace_id: str
     result: dict[str, Any] = {}
     error: str | None = None
+    narrative: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -309,12 +310,30 @@ def run_supervisor(
 
     final_state = app.invoke(initial_state)
 
+    intent = final_state.get("intent", "unknown")
+    result_data = final_state.get("result", {})
+    response_data = result_data.get("response", {}) if isinstance(result_data, dict) else {}
+
+    narrative = ""
+    if final_state.get("status") == "completed" and response_data:
+        from agents.response_generator import generate_narrative
+
+        narrative = generate_narrative(
+            intent=intent,
+            query=request.query,
+            response_data=response_data,
+        )
+
+    if isinstance(result_data, dict) and narrative:
+        result_data["narrative"] = narrative
+
     return RoutingResult(
         query=request.query,
-        intent=final_state.get("intent", "unknown"),
+        intent=intent,
         specialist=final_state.get("specialist", "none"),
         status=final_state.get("status", "error"),
         trace_id=trace_id,
-        result=final_state.get("result", {}),
+        result=result_data,
         error=final_state.get("error") or None,
+        narrative=narrative,
     )

@@ -611,7 +611,12 @@ with tab_assistant:
                     "and card management."
                 )
             else:
-                reply = mask_pii(_format_response(result.intent, response_data, result.trace_id))
+                narrative = mask_pii(result.narrative) if result.narrative else ""
+                structured = mask_pii(_format_response(result.intent, response_data, result.trace_id))
+                if narrative:
+                    reply = f"{narrative}\n\n---\n\n{structured}"
+                else:
+                    reply = structured
 
             st.markdown(reply)
             if isinstance(result_dict, dict) and result_dict:

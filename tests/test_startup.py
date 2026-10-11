@@ -50,13 +50,19 @@ class TestAppConfig:
 class TestLLMProviderFactory:
 
     def test_mock_provider_returns_mock(self):
-        llm = get_llm()
+        from gateway.llm_config import LLMConfig
+
+        mock_cfg = LLMConfig(provider="mock", model="mock-response", mock_llm=True)
+        llm = get_llm(mock_cfg)
         resp = llm.invoke("hello")
         assert resp.mock is True
         assert resp.content.startswith(MOCK_PREFIX)
 
     def test_mock_no_network_calls(self):
-        llm = get_llm()
+        from gateway.llm_config import LLMConfig
+
+        mock_cfg = LLMConfig(provider="mock", model="mock-response", mock_llm=True)
+        llm = get_llm(mock_cfg)
         for _ in range(10):
             llm.invoke("test")
         assert llm.call_count == 10

@@ -68,6 +68,12 @@ The reference architecture defines an AI-specific control plane with eleven subc
 - `llm_config.py` — `LLMConfig` dataclass with provider validation (mock/gemini/bedrock)
 - `llm_provider.py` — Factory returning `MockLLM` or `LiteLLMWrapper` via LiteLLM
 - `mock_llm.py` — Deterministic mock with `[MOCK]` prefix and keyword-based intent matching
+
+**LLM narrative generation (`agents/response_generator.py`):**
+- After each specialist agent completes, the supervisor calls `generate_narrative()` which uses the configured LLM provider to produce a natural-language explanation of the verified tool results
+- In mock mode, narratives are `[MOCK]`-prefixed; in Gemini mode, they are real LLM-generated text
+- The LLM receives only PII-masked, structured data — it cannot invent balances, scores, or citations
+- Provider failures produce an empty narrative; the system falls back to the existing structured display
 - `audit.py` — `AuditEvent` dataclass with structured logging (trace_id, tool, agent, requester, target, outcome, duration_ms); `AuditTimer` context manager
 - `input_guard.py` — Prompt injection detection (role assumption, instruction override, system prompt leak, delimiter injection, data exfiltration, SQL injection)
 - `pii.py` — PII masking for Aadhaar, PAN, email, phone, account numbers
@@ -243,6 +249,7 @@ Banksphere-ai/
 │   ├── fraud_agent.py   # Transaction scoring, recommendations
 │   ├── credit_agent.py  # Credit risk, eligibility, EMI
 │   ├── compliance_agent.py # Policy Q&A with citations and refusal
+│   ├── response_generator.py # LLM narrative generation from verified results
 │   └── supervisor.py    # LangGraph StateGraph routing with input guard
 ├── tools/               # Tool registry and domain-specific tools
 │   ├── registry.py      # Central registry, permissions, invoke_tool
@@ -319,6 +326,7 @@ Banksphere-ai/
 |---|---|---|
 | **Python version** | 3.12.3 | CLAUDE.md targets 3.11; 3.11 unavailable in environment; all deps compatible |
 | **LLM mode** | Mock by default | Zero-cost-first; `MockLLM` with `[MOCK]` prefix ensures offline development; real LLM optional via config |
+| **LLM narrative** | Post-hoc explanation of tool results | LLM generates natural-language summaries from verified structured data; cannot override scores, decisions, or authorization; falls back to template on failure |
 | **Intent classification** | Keyword regex, not LLM | Deterministic, fast, no API cost; fraud keywords checked before banking to avoid ambiguity |
 | **Agent orchestration** | LangGraph StateGraph | Single classify → specialist → END flow; TypedDict internal state with Pydantic at entry/exit |
 | **Execution model** | Sequential, not parallel | Simpler debugging; avoids rate-limit issues with free-tier LLM providers |

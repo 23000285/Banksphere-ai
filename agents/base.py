@@ -25,6 +25,7 @@ class AgentResult(BaseModel):
     response: dict[str, Any] = {}
     error: str | None = None
     is_mock: bool = True
+    narrative: str = ""
 
 
 MAX_STEPS = 10
@@ -62,6 +63,12 @@ class BaseAgent:
         response: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> AgentResult:
+        from gateway.llm_config import load_llm_config
+
+        try:
+            is_mock = load_llm_config().is_mock
+        except Exception:
+            is_mock = True
         return AgentResult(
             agent=self.name,
             trace_id=self.trace_id,
@@ -69,6 +76,7 @@ class BaseAgent:
             steps=list(self._steps),
             response=response or {},
             error=error,
+            is_mock=is_mock,
         )
 
     def _check_step_limit(self) -> AgentResult | None:

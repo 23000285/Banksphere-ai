@@ -80,7 +80,7 @@ MOCK_LLM=true
 
 # Option 2: Gemini free tier — requires API key
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini/gemini-2.0-flash
+LLM_MODEL=gemini/gemini-3.8-flash
 MOCK_LLM=false
 GEMINI_API_KEY=your-key-here
 
@@ -92,6 +92,19 @@ AWS_REGION=us-east-1
 ```
 
 **Important:** Never commit API keys. The `.env` file is gitignored. Free-tier quotas (Gemini) are limited and not guaranteed — do not rely on them for automated tests.
+
+### LLM Integration
+
+When Gemini (or another provider) is enabled, the agents use the LLM to generate natural-language narratives that explain their verified tool results. The deterministic core is unchanged:
+
+- **Intent classification** remains keyword/regex-based (no LLM)
+- **Banking agent** queries the database directly; LLM summarizes the results
+- **Fraud agent** scores with LightGBM/Isolation Forest; LLM explains the scores
+- **Credit agent** uses business rules + gradient boosting; LLM explains eligibility
+- **Compliance agent** retrieves policy via hybrid RAG; LLM summarizes with citations
+- **Card block** follows the approval gate; LLM describes the status
+
+The LLM cannot override fraud scores, credit decisions, eligibility rules, or approval gates. If the LLM call fails, the system falls back to the structured/template response with no loss of functionality.
 
 ## Demonstration Scenarios
 

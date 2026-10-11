@@ -136,6 +136,7 @@ class ChatResponse(BaseModel):
     status: str
     result: dict[str, Any] = {}
     error: str | None = None
+    narrative: str = ""
 
 
 class ApprovalActionRequest(BaseModel):
@@ -235,6 +236,7 @@ async def chat(
             status=result.status,
             result=result.result,
             error=safe_error,
+            narrative=mask_pii(result.narrative) if result.narrative else "",
         )
 
     except Exception:
