@@ -260,16 +260,18 @@ def compile_supervisor(
 # High-level entry point
 # ---------------------------------------------------------------------------
 
+_TESTING_SKIP_INPUT_GUARD = False
+
+
 def run_supervisor(
     request: RoutingRequest,
     session: Session,
     fraud_artifacts: FraudModelArtifacts | None = None,
     credit_artifacts: CreditModelArtifacts | None = None,
-    skip_input_guard: bool = False,
 ) -> RoutingResult:
     trace_id = uuid.uuid4().hex[:12]
 
-    if not skip_input_guard:
+    if not _TESTING_SKIP_INPUT_GUARD:
         from gateway.input_guard import check_input
 
         check = check_input(request.query)

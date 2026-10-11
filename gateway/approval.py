@@ -11,11 +11,13 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
 logger = logging.getLogger("banksphere.approval")
+
+APPROVAL_EXPIRY_MINUTES = 15
 
 
 class ApprovalStatus(str, Enum):
@@ -46,6 +48,11 @@ class ApprovalRequest:
     status: ApprovalStatus = ApprovalStatus.PENDING
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    expires_at: str = field(
+        default_factory=lambda: (
+            datetime.now(timezone.utc) + timedelta(minutes=APPROVAL_EXPIRY_MINUTES)
+        ).isoformat()
     )
     resolved_at: str | None = None
     resolved_by: str | None = None
@@ -95,6 +102,24 @@ def request_approval(
     return req
 
 
+def _check_expiry(req: ApprovalRequest) -> bool:
+    """Mark the request as EXPIRED if past its deadline. Returns True if expired."""
+    if req.status != ApprovalStatus.PENDING:
+        return req.status == ApprovalStatus.EXPIRED
+    now = datetime.now(timezone.utc)
+    expires = datetime.fromisoformat(req.expires_at)
+    if now >= expires:
+        req.status = ApprovalStatus.EXPIRED
+        req.resolved_at = now.isoformat()
+        req.resolved_by = "system_expiry"
+        logger.info(
+            "APPROVAL_EXPIRED %s",
+            {"request_id": req.request_id, "action": req.action},
+        )
+        return True
+    return False
+
+
 def resolve_approval(
     request_id: str,
     approved: bool,
@@ -102,10 +127,12 @@ def resolve_approval(
 ) -> ApprovalRequest | None:
     """Approve or reject a pending approval request.
 
-    Returns the updated request, or None if not found / already resolved.
+    Returns the updated request, or None if not found / already resolved / expired.
     """
     for req in _approval_log:
         if req.request_id == request_id:
+            if _check_expiry(req):
+                return None
             if req.status != ApprovalStatus.PENDING:
                 return None
             req.status = ApprovalStatus.APPROVED if approved else ApprovalStatus.REJECTED
@@ -125,7 +152,13 @@ def resolve_approval(
 
 
 def get_pending_approvals(customer_uid: str | None = None) -> list[ApprovalRequest]:
-    """Return all pending approval requests, optionally filtered by customer."""
+    """Return all pending approval requests, optionally filtered by customer.
+
+    Expired requests are marked as EXPIRED before filtering.
+    """
+    for r in _approval_log:
+        if r.status == ApprovalStatus.PENDING:
+            _check_expiry(r)
     return [
         r for r in _approval_log
         if r.status == ApprovalStatus.PENDING

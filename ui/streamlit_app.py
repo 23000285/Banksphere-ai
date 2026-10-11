@@ -51,11 +51,20 @@ def _init_backend():
     fraud_artifacts = train_fraud_models()
     credit_artifacts = train_credit_model()
 
+    from tools.compliance_tools import init_retriever
+    from rag.chroma_store import ingest_chunks
+    from rag.loader import load_policy_documents
+
+    chunks = load_policy_documents()
+    if chunks:
+        ingest_chunks(chunks)
+
     _TOOL_REGISTRY.clear()
     register_banking_tools()
     register_fraud_tools()
     register_credit_tools()
     register_compliance_tools()
+    init_retriever()
 
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -116,6 +125,10 @@ def _format_fraud(resp: dict) -> str:
         )
         if txn.get("requires_approval"):
             lines.append("  - ⚠️ *Requires human approval before action*")
+        features = txn.get("top_features")
+        if features:
+            feat_parts = [f"`{f['feature']}`: {f['importance']:.3f}" for f in features[:3]]
+            lines.append(f"  - Key factors: {', '.join(feat_parts)}")
     return "\n".join(lines)
 
 
@@ -125,17 +138,35 @@ def _format_credit(resp: dict) -> str:
     if elig is not None:
         icon = "✅" if elig else "❌"
         lines.append(f"- {icon} **Eligible:** {'Yes' if elig else 'No'}")
-    for key in ("risk_category", "default_probability", "monthly_emi",
-                "total_payment", "total_interest"):
+
+    display_keys = [
+        ("risk_category", "Risk Category"),
+        ("default_probability", "Default Probability"),
+        ("emi", "Monthly EMI"),
+        ("monthly_emi", "Monthly EMI"),
+        ("total_payment", "Total Payment"),
+        ("total_interest", "Total Interest"),
+        ("debt_to_income_ratio", "Debt To Income Ratio"),
+        ("max_eligible_amount", "Max Eligible Amount"),
+    ]
+    seen_labels: set[str] = set()
+    for key, label in display_keys:
+        if label in seen_labels:
+            continue
         val = resp.get(key)
-        if val is not None:
-            label = key.replace("_", " ").title()
-            if isinstance(val, float) and val < 1:
-                lines.append(f"- **{label}:** {val:.4f}")
-            elif isinstance(val, (int, float)):
-                lines.append(f"- **{label}:** ₹{val:,.2f}")
-            else:
-                lines.append(f"- **{label}:** {val}")
+        if val is None:
+            continue
+        seen_labels.add(label)
+        try:
+            num = float(val)
+        except (ValueError, TypeError):
+            lines.append(f"- **{label}:** {val}")
+            continue
+        if 0 < num < 1:
+            lines.append(f"- **{label}:** {num:.4f}")
+        else:
+            lines.append(f"- **{label}:** ₹{num:,.2f}")
+
     reasons = resp.get("reason_codes") or resp.get("reasons")
     if reasons:
         lines.append("\n**Reason Codes:**")
@@ -243,6 +274,15 @@ def _render_risk_chart(result_data: dict):
     st.subheader("Transaction Risk Scores")
     st.bar_chart(df.set_index("Transaction")["Fraud Score"], color="#ff4b4b")
     st.dataframe(df, width="stretch", hide_index=True)
+
+    for txn in scored:
+        features = txn.get("top_features")
+        if features:
+            txn_id = txn.get("transaction_uid", "")[:8]
+            with st.expander(f"Feature explanation — {txn_id}..."):
+                feat_df = pd.DataFrame(features)
+                if not feat_df.empty and "importance" in feat_df.columns:
+                    st.bar_chart(feat_df.set_index("feature")["importance"])
 
 
 # ---------------------------------------------------------------------------
@@ -571,7 +611,7 @@ with tab_assistant:
                     "and card management."
                 )
             else:
-                reply = _format_response(result.intent, response_data, result.trace_id)
+                reply = mask_pii(_format_response(result.intent, response_data, result.trace_id))
 
             st.markdown(reply)
             if isinstance(result_dict, dict) and result_dict:

@@ -357,7 +357,7 @@ def execute_card_block(session: Session, approval_request_id: str) -> dict:
     Returns a dict with status and message.  This function is the enforcement
     point — the card status change happens here, never before approval.
     """
-    from gateway.approval import ApprovalStatus, get_approval_log
+    from gateway.approval import ApprovalStatus, _check_expiry, get_approval_log
 
     matching = [
         r for r in get_approval_log()
@@ -367,6 +367,7 @@ def execute_card_block(session: Session, approval_request_id: str) -> dict:
         return {"status": "error", "message": "Approval request not found."}
 
     req = matching[0]
+    _check_expiry(req)
 
     if req.status == ApprovalStatus.PENDING:
         return {

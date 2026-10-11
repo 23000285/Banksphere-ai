@@ -54,10 +54,19 @@ async def lifespan(app: FastAPI):
     _state["fraud_artifacts"] = train_fraud_models()
     _state["credit_artifacts"] = train_credit_model()
 
+    from tools.compliance_tools import init_retriever
+    from rag.chroma_store import ingest_chunks
+    from rag.loader import load_policy_documents
+
+    chunks = load_policy_documents()
+    if chunks:
+        ingest_chunks(chunks)
+
     register_banking_tools()
     register_fraud_tools()
     register_credit_tools()
     register_compliance_tools()
+    init_retriever()
 
     logger.info("Startup complete — models trained, tools registered")
     yield
@@ -132,6 +141,7 @@ class ChatResponse(BaseModel):
 class ApprovalActionRequest(BaseModel):
     approved: bool
     resolved_by: str = "human_operator"
+    customer_uid: str | None = None
 
 
 class ApprovalResponse(BaseModel):
@@ -248,7 +258,18 @@ async def resolve_approval_endpoint(
     _key: str = Depends(verify_api_key),
 ):
     """Approve or reject a pending sensitive-action request."""
-    from gateway.approval import resolve_approval
+    from gateway.approval import get_approval_log, resolve_approval
+
+    if body.customer_uid:
+        matching = [
+            r for r in get_approval_log()
+            if r.request_id == request_id
+        ]
+        if matching and matching[0].customer_uid != body.customer_uid:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot resolve approval for a different customer.",
+            )
 
     resolved = resolve_approval(
         request_id=request_id,

@@ -23,7 +23,20 @@ BankSphere AI demonstrates a supervisor-agent architecture where specialist agen
 
 ## Project Status
 
-Phase 1 — Project scaffold with core dependencies, centralized LLM configuration, and deterministic mock mode. No agents or ML pipelines yet.
+All 14 phases are implemented:
+
+- Synthetic banking data (200 customers, ~50K transactions, loans)
+- Banking tools with customer-level authorization and audit logging
+- Fraud detection (LightGBM + Isolation Forest + SHAP explanations)
+- Credit risk assessment with eligibility rules and EMI calculator
+- Hybrid RAG (ChromaDB + BM25) for 6 synthetic policy documents
+- Compliance agent with evidence-grounded citations and refusal
+- LangGraph supervisor routing (banking, fraud, credit, compliance, card_block)
+- Gateway guardrails: PII masking, prompt-injection detection, input validation
+- Human approval gate for sensitive actions with time-based expiration
+- FastAPI REST API with API-key auth and trace IDs
+- Streamlit UI with Banking Dashboard, AI Assistant, and Risk & Approvals tabs
+- 434+ automated tests
 
 ## Quick Start
 
@@ -40,6 +53,12 @@ cp .env.example .env
 
 # Run tests
 python -m pytest -q
+
+# Start the Streamlit UI
+streamlit run ui/streamlit_app.py
+
+# Or start the FastAPI server
+uvicorn app.main:app --reload
 ```
 
 ## LLM Provider Configuration
