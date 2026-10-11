@@ -123,3 +123,10 @@ def register_credit_tools() -> None:
 
     register_tool("assess_credit_risk", assess_credit_risk)
     register_tool("calculate_emi", calculate_emi)
+
+
+def register_compliance_tools() -> None:
+    """Register compliance domain tools (retrieve_policy)."""
+    from tools.compliance_tools import retrieve_policy
+
+    register_tool("retrieve_policy", retrieve_policy)

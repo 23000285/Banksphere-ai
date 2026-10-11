@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from agents.banking_agent import BankingAgent
+from agents.compliance_agent import ComplianceAgent
 from agents.credit_agent import CreditAgent
 from agents.fraud_agent import FraudAgent
 from ml.credit_model import CreditModelArtifacts
@@ -73,6 +74,7 @@ class _GraphState(TypedDict, total=False):
 
 _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
     ("fraud", ["fraud", "fraudulent", "suspicious", "risk score", "flagged", "anomaly"]),
+    ("compliance", ["kyc", "policy", "compliance", "regulation", "aml", "know your customer", "minor account", "guardian", "dormant"]),
     ("credit", ["credit", "loan", "emi", "eligibility", "borrow", "interest rate"]),
     ("banking", ["balance", "transactions", "transaction", "account", "profile", "card", "transfer", "statement"]),
 ]
@@ -149,18 +151,32 @@ def _credit_node(
     }
 
 
+def _compliance_node(state: _GraphState) -> dict:
+    agent = ComplianceAgent(trace_id=state.get("trace_id", ""))
+    result = agent.answer_policy_question(
+        query=state["query"],
+        customer_uid=state.get("customer_uid"),
+    )
+    return {
+        "result": result.model_dump(mode="json"),
+        "status": result.status,
+        "error": result.error,
+        "steps_taken": state.get("steps_taken", 0) + 1,
+    }
+
+
 def _unsupported_node(state: _GraphState) -> dict:
     return {
         "result": {},
         "status": "unsupported",
-        "error": f"Could not route query: '{state['query']}'. Supported intents: banking, fraud, credit.",
+        "error": f"Could not route query: '{state['query']}'. Supported intents: banking, fraud, credit, compliance.",
         "steps_taken": state.get("steps_taken", 0) + 1,
     }
 
 
 def _route_condition(state: _GraphState) -> str:
     intent = state.get("intent", "unsupported")
-    if intent in ("banking", "fraud", "credit"):
+    if intent in ("banking", "fraud", "credit", "compliance"):
         return intent
     return "unsupported"
 
@@ -180,6 +196,7 @@ def build_supervisor_graph(
     graph.add_node("banking", lambda s: _banking_node(s, session))
     graph.add_node("fraud", lambda s: _fraud_node(s, session, fraud_artifacts))
     graph.add_node("credit", lambda s: _credit_node(s, session, credit_artifacts))
+    graph.add_node("compliance", _compliance_node)
     graph.add_node("unsupported", _unsupported_node)
 
     graph.set_entry_point("classify")
@@ -190,12 +207,14 @@ def build_supervisor_graph(
             "banking": "banking",
             "fraud": "fraud",
             "credit": "credit",
+            "compliance": "compliance",
             "unsupported": "unsupported",
         },
     )
     graph.add_edge("banking", END)
     graph.add_edge("fraud", END)
     graph.add_edge("credit", END)
+    graph.add_edge("compliance", END)
     graph.add_edge("unsupported", END)
 
     return graph
