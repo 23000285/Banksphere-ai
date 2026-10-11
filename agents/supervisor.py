@@ -238,8 +238,23 @@ def run_supervisor(
     session: Session,
     fraud_artifacts: FraudModelArtifacts | None = None,
     credit_artifacts: CreditModelArtifacts | None = None,
+    skip_input_guard: bool = False,
 ) -> RoutingResult:
     trace_id = uuid.uuid4().hex[:12]
+
+    if not skip_input_guard:
+        from gateway.input_guard import check_input
+
+        check = check_input(request.query)
+        if not check.is_safe:
+            return RoutingResult(
+                query=request.query,
+                intent="rejected",
+                specialist="none",
+                status="rejected",
+                trace_id=trace_id,
+                error=f"Input rejected: {check.rejection_reason}",
+            )
 
     app = compile_supervisor(session, fraud_artifacts, credit_artifacts)
 
