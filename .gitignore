@@ -33,6 +33,7 @@ ml/models/*.pkl
 ml/models/*.joblib
 ml/models/*.txt
 rag/chroma_db/
+data/chroma_db/
 
 # Testing
 .pytest_cache/

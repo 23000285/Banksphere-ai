@@ -23,10 +23,10 @@ lightgbm>=4.0,<5.0
 scikit-learn>=1.4,<2.0
 shap>=0.44,<1.0
 
-# RAG (Phase 8+)
-# chromadb
-# rank-bm25
-# sentence-transformers
+# RAG
+chromadb>=1.0,<2.0
+rank-bm25>=0.2,<1.0
+sentence-transformers>=3.0,<7.0
 
 # UI (Phase 12+)
 # streamlit
