@@ -12,10 +12,13 @@ from sqlalchemy.orm import Session
 
 from gateway.audit import AuditEvent, AuditTimer
 from ml.db_models import Account, Customer, Transaction
+from gateway.approval import is_sensitive_action, request_approval
 from tools.schemas import (
     AccountSummary,
     AccountsRequest,
     AccountsResponse,
+    CardBlockRequest,
+    CardBlockResponse,
     CardStatusRequest,
     CardStatusResponse,
     CustomerProfileRequest,
@@ -282,3 +285,136 @@ def get_card_status(
         status=account.status,
         message=status_messages.get(account.status, "Unknown status."),
     )
+
+
+def request_card_block(
+    session: Session,
+    request: CardBlockRequest,
+    agent: str = "banking",
+) -> CardBlockResponse:
+    denied = _authorize(
+        request.requesting_customer_uid, request.customer_uid,
+        "request_card_block", agent,
+    )
+    if denied:
+        raise AuthorizationDenied(denied.detail)
+
+    customer = _find_customer(session, request.customer_uid)
+    if customer is None:
+        raise CustomerNotFound(f"No customer with UID {request.customer_uid}")
+
+    account = next(
+        (a for a in customer.accounts if a.account_number == request.account_number),
+        None,
+    )
+    if account is None:
+        raise CustomerNotFound(
+            f"Account {request.account_number} not found for customer {request.customer_uid}"
+        )
+
+    if account.status == "frozen":
+        return CardBlockResponse(
+            customer_uid=customer.customer_uid,
+            account_number=account.account_number,
+            status="already_blocked",
+            approval_request_id="",
+            message="This card is already blocked.",
+            requires_approval=False,
+        )
+
+    approval_req = request_approval(
+        action="card_block",
+        customer_uid=request.customer_uid,
+        agent=agent,
+        reason=request.reason,
+        details={
+            "account_number": request.account_number,
+            "account_type": account.account_type,
+        },
+    )
+
+    AuditEvent(
+        tool_name="request_card_block", agent=agent,
+        requesting_customer_uid=request.requesting_customer_uid,
+        target_customer_uid=request.customer_uid,
+        outcome="pending_approval",
+        detail=f"Card block requested for {request.account_number}, approval_id={approval_req.request_id}",
+    ).log()
+
+    return CardBlockResponse(
+        customer_uid=customer.customer_uid,
+        account_number=account.account_number,
+        status="pending_approval",
+        approval_request_id=approval_req.request_id,
+        message="Card block request submitted. Awaiting human approval before execution.",
+        requires_approval=True,
+    )
+
+
+def execute_card_block(session: Session, approval_request_id: str) -> dict:
+    """Execute a card block only if the corresponding approval is APPROVED.
+
+    Returns a dict with status and message.  This function is the enforcement
+    point — the card status change happens here, never before approval.
+    """
+    from gateway.approval import ApprovalStatus, get_approval_log
+
+    matching = [
+        r for r in get_approval_log()
+        if r.request_id == approval_request_id and r.action == "card_block"
+    ]
+    if not matching:
+        return {"status": "error", "message": "Approval request not found."}
+
+    req = matching[0]
+
+    if req.status == ApprovalStatus.PENDING:
+        return {
+            "status": "pending",
+            "message": "Card block is still awaiting approval.",
+            "customer_uid": req.customer_uid,
+        }
+    if req.status == ApprovalStatus.REJECTED:
+        return {
+            "status": "rejected",
+            "message": "Card block was rejected by the operator.",
+            "customer_uid": req.customer_uid,
+        }
+    if req.status == ApprovalStatus.EXPIRED:
+        return {
+            "status": "expired",
+            "message": "Card block approval has expired.",
+            "customer_uid": req.customer_uid,
+        }
+    if req.status != ApprovalStatus.APPROVED:
+        return {"status": "error", "message": f"Unexpected approval status: {req.status}"}
+
+    account_number = req.details.get("account_number", "")
+    customer = _find_customer(session, req.customer_uid)
+    if customer is None:
+        return {"status": "error", "message": "Customer not found."}
+
+    account = next(
+        (a for a in customer.accounts if a.account_number == account_number),
+        None,
+    )
+    if account is None:
+        return {"status": "error", "message": f"Account {account_number} not found."}
+
+    account.status = "frozen"
+    session.commit()
+
+    AuditEvent(
+        tool_name="execute_card_block", agent="system",
+        requesting_customer_uid=req.customer_uid,
+        target_customer_uid=req.customer_uid,
+        outcome="success",
+        detail=f"Card blocked for account {account_number} (approval {approval_request_id})",
+    ).log()
+
+    return {
+        "status": "blocked",
+        "message": f"Card for account {account_number} has been blocked successfully.",
+        "customer_uid": req.customer_uid,
+        "account_number": account_number,
+    }

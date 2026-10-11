@@ -80,7 +80,20 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
 ]
 
 
+_CARD_BLOCK_PATTERN = re.compile(
+    r"\b(?:block|freeze|disable|stop|cancel)\b.*\b(?:card|debit card|credit card|atm)\b"
+    r"|\b(?:card|debit card|credit card|atm)\b.*\b(?:block|freeze|disable|stop|cancel)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_card_block_request(query: str) -> bool:
+    return bool(_CARD_BLOCK_PATTERN.search(query))
+
+
 def classify_intent(query: str) -> str:
+    if _is_card_block_request(query):
+        return "card_block"
     lower = query.lower()
     for intent, keywords in _INTENT_PATTERNS:
         for kw in keywords:
@@ -165,6 +178,17 @@ def _compliance_node(state: _GraphState) -> dict:
     }
 
 
+def _card_block_node(state: _GraphState, session: Session) -> dict:
+    agent = BankingAgent(trace_id=state.get("trace_id", ""))
+    result = agent.handle_card_block(session, state["customer_uid"])
+    return {
+        "result": result.model_dump(mode="json"),
+        "status": result.status,
+        "error": result.error,
+        "steps_taken": state.get("steps_taken", 0) + 1,
+    }
+
+
 def _unsupported_node(state: _GraphState) -> dict:
     return {
         "result": {},
@@ -176,7 +200,7 @@ def _unsupported_node(state: _GraphState) -> dict:
 
 def _route_condition(state: _GraphState) -> str:
     intent = state.get("intent", "unsupported")
-    if intent in ("banking", "fraud", "credit", "compliance"):
+    if intent in ("banking", "fraud", "credit", "compliance", "card_block"):
         return intent
     return "unsupported"
 
@@ -197,6 +221,7 @@ def build_supervisor_graph(
     graph.add_node("fraud", lambda s: _fraud_node(s, session, fraud_artifacts))
     graph.add_node("credit", lambda s: _credit_node(s, session, credit_artifacts))
     graph.add_node("compliance", _compliance_node)
+    graph.add_node("card_block", lambda s: _card_block_node(s, session))
     graph.add_node("unsupported", _unsupported_node)
 
     graph.set_entry_point("classify")
@@ -208,6 +233,7 @@ def build_supervisor_graph(
             "fraud": "fraud",
             "credit": "credit",
             "compliance": "compliance",
+            "card_block": "card_block",
             "unsupported": "unsupported",
         },
     )
@@ -215,6 +241,7 @@ def build_supervisor_graph(
     graph.add_edge("fraud", END)
     graph.add_edge("credit", END)
     graph.add_edge("compliance", END)
+    graph.add_edge("card_block", END)
     graph.add_edge("unsupported", END)
 
     return graph

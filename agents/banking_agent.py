@@ -16,6 +16,7 @@ from tools.banking_tools import AuthorizationDenied, CustomerNotFound
 from tools.registry import ToolPermissionDenied, invoke_tool
 from tools.schemas import (
     AccountsRequest,
+    CardBlockRequest,
     CustomerProfileRequest,
     TransactionsRequest,
 )
@@ -68,6 +69,55 @@ class BankingAgent(BaseAgent):
                 "accounts": [a.model_dump(mode="json") for a in accounts_resp.accounts],
                 "transactions": [t.model_dump(mode="json") for t in txns_resp.transactions],
                 "total_transactions_returned": txns_resp.total_returned,
+            },
+        )
+
+    def handle_card_block(
+        self,
+        session: Session,
+        customer_uid: str,
+        account_number: str | None = None,
+        reason: str = "Customer requested card block",
+    ) -> AgentResult:
+        if account_number is None:
+            accounts_resp = self._call_tool(
+                "get_accounts",
+                session=session,
+                request=AccountsRequest(
+                    customer_uid=customer_uid,
+                    requesting_customer_uid=customer_uid,
+                ),
+                agent=AGENT_NAME,
+            )
+            if accounts_resp is None:
+                return self._make_result("error", error=self._steps[-1].result_summary)
+            if not accounts_resp.accounts:
+                return self._make_result("error", error="No accounts found for this customer.")
+            account_number = accounts_resp.accounts[0].account_number
+
+        block_resp = self._call_tool(
+            "request_card_block",
+            session=session,
+            request=CardBlockRequest(
+                customer_uid=customer_uid,
+                requesting_customer_uid=customer_uid,
+                account_number=account_number,
+                reason=reason,
+            ),
+            agent=AGENT_NAME,
+        )
+        if block_resp is None:
+            return self._make_result("error", error=self._steps[-1].result_summary)
+
+        return self._make_result(
+            "completed",
+            response={
+                "action": "card_block",
+                "account_number": block_resp.account_number,
+                "status": block_resp.status,
+                "approval_request_id": block_resp.approval_request_id,
+                "message": block_resp.message,
+                "requires_approval": block_resp.requires_approval,
             },
         )
 

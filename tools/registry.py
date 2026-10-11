@@ -22,6 +22,7 @@ AGENT_PERMISSIONS: dict[str, set[str]] = {
         "get_accounts",
         "get_transactions",
         "get_card_status",
+        "request_card_block",
     },
     "fraud": {
         "get_transactions",
@@ -102,12 +103,14 @@ def register_banking_tools() -> None:
         get_card_status,
         get_customer_profile,
         get_transactions,
+        request_card_block,
     )
 
     register_tool("get_customer_profile", get_customer_profile)
     register_tool("get_accounts", get_accounts)
     register_tool("get_transactions", get_transactions)
     register_tool("get_card_status", get_card_status)
+    register_tool("request_card_block", request_card_block)
 
 
 def register_fraud_tools() -> None:

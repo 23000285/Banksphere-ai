@@ -91,6 +91,22 @@ class CardStatusResponse(BaseModel):
     message: str
 
 
+class CardBlockRequest(BaseModel):
+    customer_uid: str
+    requesting_customer_uid: str
+    account_number: str
+    reason: str = "Customer requested card block"
+
+
+class CardBlockResponse(BaseModel):
+    customer_uid: str
+    account_number: str
+    status: str
+    approval_request_id: str
+    message: str
+    requires_approval: bool = True
+
+
 class ToolError(BaseModel):
     error: str
     code: str

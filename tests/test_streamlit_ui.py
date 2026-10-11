@@ -1,24 +1,10 @@
-"""Tests for Phase 12: Streamlit UI helpers and importability."""
+"""Tests for Streamlit UI helpers, formatters, and importability."""
 
 from __future__ import annotations
 
 
 class TestFormatHelpers:
     """Test response formatting functions without running Streamlit."""
-
-    def _import_helpers(self):
-        import importlib
-        import sys
-        # Import the module's functions without triggering st.set_page_config
-        # by loading just the function source
-        from ui.streamlit_app import (
-            _format_banking,
-            _format_fraud,
-            _format_credit,
-            _format_compliance,
-            _format_response,
-        )
-        return _format_banking, _format_fraud, _format_credit, _format_compliance, _format_response
 
     def test_format_banking_accounts(self) -> None:
         from ui.streamlit_app import _format_banking
@@ -60,7 +46,12 @@ class TestFormatHelpers:
             ],
         }
         text = _format_banking(resp)
-        assert "🚩" in text
+        assert "\U0001f6a9" in text
+
+    def test_format_banking_empty(self) -> None:
+        from ui.streamlit_app import _format_banking
+        text = _format_banking({"accounts": [], "transactions": []})
+        assert "Account Summary" in text
 
     def test_format_fraud_scored(self) -> None:
         from ui.streamlit_app import _format_fraud
@@ -77,8 +68,8 @@ class TestFormatHelpers:
         text = _format_fraud(resp)
         assert "Fraud Analysis" in text
         assert "2 transactions scored" in text
-        assert "🔴" in text  # block
-        assert "🟢" in text  # allow
+        assert "\U0001f534" in text
+        assert "\U0001f7e2" in text
         assert "Requires human approval" in text
 
     def test_format_fraud_empty(self) -> None:
@@ -109,24 +100,83 @@ class TestFormatHelpers:
         assert "❌" in text
         assert "High DTI ratio" in text
 
-    def test_format_compliance(self) -> None:
+    def test_format_compliance_with_sources(self) -> None:
         from ui.streamlit_app import _format_compliance
-        resp = {"answer": "KYC verification requires government-issued photo ID."}
+        resp = {
+            "answer": "KYC verification requires government-issued photo ID.",
+            "sources": [
+                {"source": "kyc_verification.md", "category": "KYC", "heading": "Requirements"},
+                {"source": "kyc_verification.md", "category": "KYC", "heading": "Documents"},
+            ],
+        }
         text = _format_compliance(resp)
         assert "KYC verification" in text
+        assert "Sources:" in text
+        assert "kyc_verification.md" in text
+        assert "Requirements" in text
+
+    def test_format_compliance_without_sources(self) -> None:
+        from ui.streamlit_app import _format_compliance
+        resp = {"answer": "Some answer", "sources": []}
+        text = _format_compliance(resp)
+        assert "Some answer" in text
+        assert "Sources:" not in text
 
     def test_format_compliance_no_evidence(self) -> None:
         from ui.streamlit_app import _format_compliance
         text = _format_compliance({})
         assert "No policy information" in text
 
+    def test_format_card_block_pending(self) -> None:
+        from ui.streamlit_app import _format_card_block
+        resp = {
+            "action": "card_block",
+            "account_number": "BSP100000001",
+            "status": "pending_approval",
+            "approval_request_id": "abc123def456",
+            "message": "Card block request submitted.",
+            "requires_approval": True,
+        }
+        text = _format_card_block(resp)
+        assert "Card Block Request" in text
+        assert "BSP100000001" in text
+        assert "abc123de" in text
+        assert "Awaiting human approval" in text
+
+    def test_format_card_block_already_blocked(self) -> None:
+        from ui.streamlit_app import _format_card_block
+        resp = {
+            "status": "already_blocked",
+            "message": "This card is already blocked.",
+        }
+        text = _format_card_block(resp)
+        assert "already blocked" in text
+
     def test_format_response_routing(self) -> None:
         from ui.streamlit_app import _format_response
         text = _format_response("banking", {"accounts": [], "transactions": []}, "trace123")
         assert "Account Summary" in text
 
-        text2 = _format_response("unknown_intent", {}, "trace456")
-        assert "trace45" in text2
+        text2 = _format_response("card_block", {
+            "status": "pending_approval",
+            "account_number": "BSP001",
+            "approval_request_id": "test123",
+            "message": "Submitted.",
+            "requires_approval": True,
+        }, "trace456")
+        assert "Card Block" in text2
+
+        text3 = _format_response("unknown_intent", {}, "trace789")
+        assert "trace78" in text3
+
+    def test_format_response_compliance_routing(self) -> None:
+        from ui.streamlit_app import _format_response
+        text = _format_response("compliance", {
+            "answer": "Policy says X.",
+            "sources": [{"source": "test.md", "category": "Test", "heading": "Sec1"}],
+        }, "trace999")
+        assert "Policy says X" in text
+        assert "test.md" in text
 
 
 class TestStreamlitImport:
@@ -137,3 +187,5 @@ class TestStreamlitImport:
         assert hasattr(ui.streamlit_app, "_format_response")
         assert hasattr(ui.streamlit_app, "_render_trace")
         assert hasattr(ui.streamlit_app, "_init_backend")
+        assert hasattr(ui.streamlit_app, "_format_card_block")
+        assert hasattr(ui.streamlit_app, "_format_compliance")
